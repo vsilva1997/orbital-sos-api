@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      SA_PASSWORD: "OrbitalSOS@2024"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "OrbitalSOS@2024", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ConnectionStrings__DefaultConnection: "Server=db;Database=OrbitalSOS;User Id=sa;Password=OrbitalSOS@2024;TrustServerCertificate=True;"
+      Jwt__Key: "OrbitalSOS-Super-Secret-Key-2024-FIAP-Assignment"
+      Jwt__Issuer: "OrbitalSOS"
+      Jwt__Audience: "OrbitalSOS"

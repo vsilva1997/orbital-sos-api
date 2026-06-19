@@ -1,0 +1,387 @@
+{
+  "info": {
+    "_postman_id": "orbitalsos-collection-2024",
+    "name": "OrbitalSOS API",
+    "description": "Coleção completa da API OrbitalSOS — plataforma de resposta a desastres climáticos (FIAP)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  pm.collectionVariables.set('token', json.token);",
+                  "  console.log('Token salvo:', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin Usuario\",\n  \"email\": \"admin@orbitalsos.com\",\n  \"password\": \"Admin@123\",\n  \"role\": 0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  pm.collectionVariables.set('token', json.token);",
+                  "  console.log('Token salvo:', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@orbitalsos.com\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shelters",
+      "item": [
+        {
+          "name": "List Shelters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/shelters?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shelters"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "lat", "value": "-23.5505", "disabled": true },
+                { "key": "lon", "value": "-46.6333", "disabled": true },
+                { "key": "radiusKm", "value": "10", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Shelter by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/shelters/{{shelterId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shelters", "{{shelterId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Shelter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var json = pm.response.json();",
+                  "  pm.collectionVariables.set('shelterId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Abrigo Central SP\",\n  \"address\": \"Rua da Consolação, 1000, São Paulo, SP\",\n  \"latitude\": -23.5505,\n  \"longitude\": -46.6333,\n  \"capacity\": 200,\n  \"type\": 0\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/shelters", "host": ["{{baseUrl}}"], "path": ["api", "shelters"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Climate Alerts",
+      "item": [
+        {
+          "name": "List Climate Alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/climatealerts?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "climatealerts"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "region", "value": "São Paulo", "disabled": true },
+                { "key": "isActive", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Climate Alert by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/climatealerts/{{alertId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "climatealerts", "{{alertId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Climate Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var json = pm.response.json();",
+                  "  pm.collectionVariables.set('alertId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"riskType\": 0,\n  \"level\": 2,\n  \"affectedRegion\": \"Vale do Paraíba, SP\",\n  \"expectedAt\": \"2024-12-31T18:00:00Z\",\n  \"description\": \"Risco de enchente severa na região do Vale do Paraíba devido às chuvas intensas.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/climatealerts", "host": ["{{baseUrl}}"], "path": ["api", "climatealerts"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Risk Areas",
+      "item": [
+        {
+          "name": "List Risk Areas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/riskareas?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "riskareas"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "alertId", "value": "{{alertId}}", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Risk Area",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"climateAlertId\": \"{{alertId}}\",\n  \"name\": \"Zona de Risco Norte\",\n  \"polygonGeoJson\": \"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[[-46.6,-23.5],[-46.5,-23.5],[-46.5,-23.4],[-46.6,-23.4],[-46.6,-23.5]]]}\",\n  \"dangerLevel\": 2\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/riskareas", "host": ["{{baseUrl}}"], "path": ["api", "riskareas"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SOS Requests",
+      "item": [
+        {
+          "name": "List SOS Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sosrequests?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sosrequests"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get SOS Request by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sosrequests/{{sosRequestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sosrequests", "{{sosRequestId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create SOS Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var json = pm.response.json();",
+                  "  pm.collectionVariables.set('sosRequestId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emergencyType\": 0,\n  \"latitude\": -23.5505,\n  \"longitude\": -46.6333,\n  \"suggestedShelterId\": null,\n  \"notes\": \"Família de 4 pessoas, criança de 2 anos. Precisamos de resgate urgente.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/sosrequests", "host": ["{{baseUrl}}"], "path": ["api", "sosrequests"] }
+          }
+        },
+        {
+          "name": "Update SOS Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sosrequests/{{sosRequestId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sosrequests", "{{sosRequestId}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Donations",
+      "item": [
+        {
+          "name": "List Donations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/donations?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "donations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Donation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shelterId\": \"{{shelterId}}\",\n  \"donorName\": \"Maria Silva\",\n  \"itemType\": \"Água mineral (5L)\",\n  \"quantity\": 50\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/donations", "host": ["{{baseUrl}}"], "path": ["api", "donations"] }
+          }
+        },
+        {
+          "name": "Get Shelter Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/donations/shelter/{{shelterId}}/balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "donations", "shelter", "{{shelterId}}", "balance"]
+            }
+          }
+        },
+        {
+          "name": "Create Shelter Need",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shelterId\": \"{{shelterId}}\",\n  \"itemType\": \"Cobertores\",\n  \"quantityNeeded\": 100\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/donations/needs", "host": ["{{baseUrl}}"], "path": ["api", "donations", "needs"] }
+          }
+        }
+      ]
+    }
+  ]
+}
