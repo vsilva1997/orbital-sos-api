@@ -1,28 +1,57 @@
-version: "3.9"
+# Ambiente local: API .NET 8 + SQL Server 2022
+#   cp .env.example .env        (troque os valores)
+#   docker compose up -d --build
+# Staging e produção simulados: docker-compose.staging.yml e docker-compose.prod.yml
+name: orbital-sos
+
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    # O SQL Server só tem imagem x86_64; em Mac Apple Silicon roda via Rosetta
+    platform: linux/amd64
     environment:
-      SA_PASSWORD: "OrbitalSOS@2024"
       ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?defina MSSQL_SA_PASSWORD no .env}
+    volumes:
+      - mssql-data:/var/opt/mssql
+    networks:
+      - orbital-net
     ports:
-      - "1433:1433"
+      - "127.0.0.1:${DB_PORT:-1433}:1433"
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "OrbitalSOS@2024", "-Q", "SELECT 1"]
+      # Desde o SQL Server 2022 CU14 o sqlcmd fica em mssql-tools18 e exige -C (confiar no certificado)
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -b -Q 'SELECT 1' > /dev/null"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${API_IMAGE:-orbital-sos-api:local}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: Server=db,1433;Database=${DB_NAME:-OrbitalSOS};User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True
+      Jwt__Key: ${JWT_KEY:?defina JWT_KEY no .env}
+      Admin__Email: ${ADMIN_EMAIL:-}
+      Admin__Password: ${ADMIN_PASSWORD:-}
     ports:
-      - "8080:80"
+      - "${API_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      ASPNETCORE_ENVIRONMENT: Docker
-      ConnectionStrings__DefaultConnection: "Server=db;Database=OrbitalSOS;User Id=sa;Password=OrbitalSOS@2024;TrustServerCertificate=True;"
-      Jwt__Key: "OrbitalSOS-Super-Secret-Key-2024-FIAP-Assignment"
-      Jwt__Issuer: "OrbitalSOS"
-      Jwt__Audience: "OrbitalSOS"
+    networks:
+      - orbital-net
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
+
+networks:
+  orbital-net:
+    driver: bridge
