@@ -10,6 +10,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _dbName = "TestDb_" + Guid.NewGuid();
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Chave só de teste; UseSetting é lido antes do Build() do Program.cs
+        builder.UseSetting("Jwt:Key", "chave-somente-para-testes-automatizados-0123456789");
         builder.ConfigureServices(services =>
         {
             var desc = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));

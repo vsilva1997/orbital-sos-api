@@ -11,9 +11,15 @@ using OrbitalSOS.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// DB
+// DB: a connection string vem da variável de ambiente ConnectionStrings__DefaultConnection
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Defina a variável de ambiente ConnectionStrings__DefaultConnection.");
+    // Retry para falhas transitórias (ex.: Azure SQL serverless retomando após pausa)
+    opt.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+});
 
 // Repos
 builder.Services.AddScoped<ShelterRepository>();
@@ -31,8 +37,10 @@ builder.Services.AddScoped<ISosRequestService, SosRequestService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// JWT
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+// JWT: a chave vem da variável de ambiente Jwt__Key (HMAC-SHA256 exige no mínimo 32 bytes)
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    throw new InvalidOperationException("Defina a variável de ambiente Jwt__Key com pelo menos 32 caracteres.");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opt =>
     {
