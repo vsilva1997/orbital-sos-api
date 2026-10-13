@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using OrbitalSOS.Application.DTOs.Auth;
 using OrbitalSOS.Application.Interfaces;
 using OrbitalSOS.Domain.Entities;
+using OrbitalSOS.Domain.Enums;
 using OrbitalSOS.Infrastructure.Repositories;
 namespace OrbitalSOS.Application.Services;
 public class AuthService : IAuthService
@@ -21,7 +22,7 @@ public class AuthService : IAuthService
         {
             Name = dto.Name, Email = dto.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-            Role = dto.Role
+            Role = UserRole.Usuario
         };
         await _repo.AddAsync(user);
         return GenerateToken(user);

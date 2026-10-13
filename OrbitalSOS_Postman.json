@@ -6,7 +6,9 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "adminEmail", "value": "", "type": "string" },
+    { "key": "adminPassword", "value": "", "type": "string" },
     { "key": "token", "value": "", "type": "string" }
   ],
   "item": [
@@ -35,13 +37,13 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Admin Usuario\",\n  \"email\": \"admin@orbitalsos.com\",\n  \"password\": \"Admin@123\",\n  \"role\": 0\n}"
+              "raw": "{\n  \"name\": \"Usuario Teste\",\n  \"email\": \"usuario{{$timestamp}}@orbitalsos.com\",\n  \"password\": \"Usuario@123\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] }
           }
         },
         {
-          "name": "Login",
+          "name": "Login (Admin)",
           "event": [
             {
               "listen": "test",
@@ -62,7 +64,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@orbitalsos.com\",\n  \"password\": \"Admin@123\"\n}"
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
           }

@@ -87,6 +87,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     if (db.Database.IsRelational()) db.Database.Migrate();
+    if (await AdminSeeder.SeedAsync(db, app.Configuration["Admin:Email"], app.Configuration["Admin:Password"], app.Configuration["Admin:Name"]))
+        app.Logger.LogInformation("Administrador inicial criado: {Email}", app.Configuration["Admin:Email"]);
 }
 
 app.UseSwagger();
