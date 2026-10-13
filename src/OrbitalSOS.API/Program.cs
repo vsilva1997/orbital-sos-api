@@ -69,11 +69,11 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Apply migrations on startup
+// Apply migrations on startup (somente em banco relacional; os testes usam EF InMemory)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    if (db.Database.IsRelational()) db.Database.Migrate();
 }
 
 app.UseSwagger();
