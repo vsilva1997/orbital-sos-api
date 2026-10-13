@@ -1,0 +1,265 @@
+# Pipeline CI/CD da Orbital SOS API (projeto Cidades ESGInteligentes)
+#
+#   feature/* --PR--> develop : build + testes + docker compose (smoke)
+#   push em develop           : ... + imagem no GHCR + deploy em STAGING
+#   develop --PR--> main      : build + testes + docker compose (smoke)
+#   push em main              : ... + imagem no GHCR + aprovação manual + deploy em PRODUÇÃO
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  IMAGE_NAME: ghcr.io/vsilva1997/orbital-sos-api
+
+jobs:
+  build-test:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET 8 (com cache do NuGet)
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore
+        run: dotnet restore --locked-mode
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Testes (xUnit)
+        run: >-
+          dotnet test -c Release --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --logger "console;verbosity=normal"
+          --results-directory TestResults
+
+      - name: Resumo dos testes
+        if: always()
+        run: |
+          trx=TestResults/test-results.trx
+          if [ ! -f "$trx" ]; then echo "Nenhum resultado de teste encontrado" >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          python3 - "$trx" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          root = ET.parse(sys.argv[1]).getroot()
+          c = root.find(".//t:ResultSummary/t:Counters", ns).attrib
+          print(f"### Testes: {c['passed']}/{c['total']} aprovados, {c['failed']} falhas\n")
+          print("| Teste | Resultado |\n|---|---|")
+          for r in sorted(root.findall(".//t:UnitTestResult", ns), key=lambda r: r.get("testName")):
+              icon = "✅" if r.get("outcome") == "Passed" else "❌"
+              print(f"| {r.get('testName')} | {icon} {r.get('outcome')} |")
+          PY
+
+      - name: Publicar resultados dos testes (artefato)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Verificar pacotes NuGet vulneráveis
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -qE '^\s+>' vulnerable.txt; then
+            echo "::warning::Há pacotes NuGet com vulnerabilidades conhecidas (veja o log deste passo)"
+          fi
+
+  compose-smoke:
+    name: Docker Compose (smoke test)
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validar compose (local, staging e prod)
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.staging.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+      - name: Gerar .env efêmero com segredos aleatórios
+        run: |
+          {
+            echo "ASPNETCORE_ENVIRONMENT=Development"
+            echo "MSSQL_SA_PASSWORD=Ci1-$(openssl rand -hex 12)"
+            echo "JWT_KEY=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "ADMIN_EMAIL=admin@ci.orbitalsos.dev"
+            echo "ADMIN_PASSWORD=Ci1-$(openssl rand -hex 10)"
+            echo "APP_VERSION=${GITHUB_SHA}"
+          } > .env
+
+      - name: Subir API + SQL Server (docker compose up)
+        run: docker compose up -d --build --wait --wait-timeout 300
+
+      - name: Smoke test (health, swagger, register, login, admin)
+        run: |
+          set -a; source .env; set +a
+          SMOKE_TIMEOUT=120 SMOKE_INTERVAL=5 scripts/smoke-test.sh http://localhost:8080 "$GITHUB_SHA" --full
+
+      - name: Containers em execução
+        if: always()
+        run: docker compose ps
+
+      - name: Logs dos containers (em caso de falha)
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Derrubar ambiente
+        if: always()
+        run: docker compose down -v
+
+  docker:
+    name: Imagem Docker (GHCR)
+    needs: [build-test, compose-smoke]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags e labels da imagem
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=Orbital SOS API
+            org.opencontainers.image.description=API .NET 8 do projeto Cidades ESGInteligentes
+
+      - name: Build e push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Resumo da imagem
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "### Imagem publicada no GHCR"
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-staging:
+    name: Deploy em staging
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Disparar deploy no Render com a imagem do commit
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          IMAGE: ${{ needs.docker.outputs.image }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::Secret RENDER_DEPLOY_HOOK_URL não configurado no environment staging"; exit 1
+          fi
+          echo "Imagem: $IMAGE"
+          curl -fsS -X POST -G "$DEPLOY_HOOK" --data-urlencode "imgURL=$IMAGE" -o /dev/null -w "Render respondeu HTTP %{http_code}\n"
+
+      - name: Smoke test no /health (com retry)
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "::error::Variável APP_URL não configurada no environment staging"; exit 1; fi
+          scripts/smoke-test.sh "$APP_URL" "$GITHUB_SHA"
+          echo "### Staging no ar: $APP_URL/swagger (versão $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-production:
+    name: Deploy em produção
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Disparar deploy no Render com a imagem do commit
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          IMAGE: ${{ needs.docker.outputs.image }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::Secret RENDER_DEPLOY_HOOK_URL não configurado no environment production"; exit 1
+          fi
+          echo "Imagem: $IMAGE"
+          curl -fsS -X POST -G "$DEPLOY_HOOK" --data-urlencode "imgURL=$IMAGE" -o /dev/null -w "Render respondeu HTTP %{http_code}\n"
+
+      - name: Smoke test no /health (com retry)
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "::error::Variável APP_URL não configurada no environment production"; exit 1; fi
+          scripts/smoke-test.sh "$APP_URL" "$GITHUB_SHA"
+          echo "### Produção no ar: $APP_URL/swagger (versão $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
