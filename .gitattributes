@@ -1,0 +1,2 @@
+# Scripts shell sempre com LF (rodam em container/Linux mesmo se o clone for no Windows)
+*.sh text eol=lf
