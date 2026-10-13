@@ -1,0 +1,15 @@
+# Simula o ambiente de STAGING localmente (projeto, volume e porta próprios):
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+#   http://localhost:8081/swagger
+name: orbital-sos-staging
+
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+    ports: !override
+      - "8081:8080"
+
+  db:
+    # Banco acessível só pela rede interna do compose
+    ports: !reset []

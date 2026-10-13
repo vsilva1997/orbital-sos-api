@@ -1,0 +1,23 @@
+# Simula PRODUÇÃO localmente com a imagem publicada pelo pipeline no GHCR:
+#   IMAGE_TAG=<sha-do-commit> docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   http://localhost:8082/swagger
+name: orbital-sos-prod
+
+services:
+  api:
+    image: ghcr.io/vsilva1997/orbital-sos-api:${IMAGE_TAG:-main}
+    pull_policy: always
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    ports: !override
+      - "8082:8080"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          # Mesmo limite de memória do plano Free do Render
+          memory: 512m
+
+  db:
+    ports: !reset []
+    restart: always

@@ -1,0 +1,31 @@
+# Artefatos de build: são gerados dentro do container
+**/bin/
+**/obj/
+**/TestResults/
+
+# Controle de versão, CI e IDEs
+.git/
+.github/
+.gitignore
+.vs/
+.vscode/
+.idea/
+**/.DS_Store
+
+# Segredos nunca entram na imagem
+.env
+.env.*
+**/*.pfx
+**/secrets.json
+
+# Fora do runtime da API
+tests/
+docs/
+scripts/
+*.md
+OrbitalSOS_Postman.json
+Dockerfile
+.dockerignore
+docker-compose*.yml
+render.yaml
+entrega.zip

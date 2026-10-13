@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Gera packages.lock.json: restore reprodutível (modo locked) e chave do cache NuGet no CI -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
