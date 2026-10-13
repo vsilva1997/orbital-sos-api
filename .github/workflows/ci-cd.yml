@@ -27,7 +27,7 @@ env:
 jobs:
   build-test:
     name: Build e testes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -89,7 +89,7 @@ jobs:
   compose-smoke:
     name: Docker Compose (smoke test)
     needs: build-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -137,7 +137,7 @@ jobs:
     name: Imagem Docker (GHCR)
     needs: [build-test, compose-smoke]
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -198,7 +198,7 @@ jobs:
     name: Deploy em staging
     needs: docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
       name: staging
@@ -233,7 +233,7 @@ jobs:
     name: Deploy em produção
     needs: docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
       name: production
