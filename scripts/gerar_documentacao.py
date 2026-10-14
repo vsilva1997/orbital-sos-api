@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EVIDENCIAS = ROOT / "docs" / "evidencias"
 SAIDA = ROOT / "docs" / "Documentacao_DevOps.pptx"
 
-INTEGRANTES = "[PREENCHA COM OS NOMES E RMs]"
+INTEGRANTES = "Bruna (RM 564310)  ·  Vinicius (RM 565846)"
 REPO_URL = "https://github.com/vsilva1997/orbital-sos-api"
 STAGING_URL = "https://orbital-sos-api-staging.onrender.com"
 PROD_URL = "https://orbital-sos-api-prod.onrender.com"

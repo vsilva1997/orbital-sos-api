@@ -292,6 +292,6 @@ As imagens ficam em [`docs/evidencias/`](docs/evidencias/), e a lista do que cad
 | Dockerfile funcional | ☑ build validado no pipeline (job `compose-smoke` e `docker`) |
 | docker-compose.yml ou arquivos Kubernetes | ☑ `docker-compose.yml` + overrides de staging e prod |
 | Pipeline com etapas de build, teste e deploy | ☑ `.github/workflows/ci-cd.yml` |
-| README.md com instruções e prints | ☐ instruções prontas; faltam os prints em `docs/evidencias/` |
-| Documentação técnica com evidências (PDF ou PPT) | ☐ `docs/Documentacao_DevOps.pptx`; faltam os prints e os integrantes |
+| README.md com instruções e prints | ☑ 14 prints em `docs/evidencias/` |
+| Documentação técnica com evidências (PDF ou PPT) | ☑ `docs/Documentacao_DevOps.pptx` |
 | Deploy realizado nos ambientes staging e produção | ☑ Render + Supabase, pelo pipeline (links no topo e em "Prints do funcionamento") |
