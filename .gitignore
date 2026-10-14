@@ -26,6 +26,7 @@ Thumbs.db
 *.pfx
 appsettings.*.local.json
 secrets.json
+.segredos/
 
 # Pacote de entrega gerado por scripts/empacotar.*
 entrega.zip

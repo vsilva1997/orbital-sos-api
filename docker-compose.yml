@@ -1,4 +1,4 @@
-# Ambiente local: API .NET 8 + SQL Server 2022
+# Ambiente local: API .NET 8 + PostgreSQL 17 (mesma versão major do Supabase usado em staging/produção)
 #   cp .env.example .env        (troque os valores)
 #   docker compose up -d --build
 # Staging e produção simulados: docker-compose.staging.yml e docker-compose.prod.yml
@@ -6,26 +6,23 @@ name: orbital-sos
 
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    # O SQL Server só tem imagem x86_64; em Mac Apple Silicon roda via Rosetta
-    platform: linux/amd64
+    image: postgres:17-alpine
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?defina MSSQL_SA_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-orbitalsos}
+      POSTGRES_USER: ${POSTGRES_USER:-orbitalsos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
     volumes:
-      - mssql-data:/var/opt/mssql
+      - pg-data:/var/lib/postgresql/data
     networks:
       - orbital-net
     ports:
-      - "127.0.0.1:${DB_PORT:-1433}:1433"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     healthcheck:
-      # Desde o SQL Server 2022 CU14 o sqlcmd fica em mssql-tools18 e exige -C (confiar no certificado)
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -b -Q 'SELECT 1' > /dev/null"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
       timeout: 5s
-      retries: 15
-      start_period: 30s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
   api:
@@ -36,7 +33,7 @@ services:
     image: ${API_IMAGE:-orbital-sos-api:local}
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ConnectionStrings__DefaultConnection: Server=db,1433;Database=${DB_NAME:-OrbitalSOS};User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-orbitalsos};Username=${POSTGRES_USER:-orbitalsos};Password=${POSTGRES_PASSWORD}
       Jwt__Key: ${JWT_KEY:?defina JWT_KEY no .env}
       Admin__Email: ${ADMIN_EMAIL:-}
       Admin__Password: ${ADMIN_PASSWORD:-}
@@ -50,7 +47,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  mssql-data:
+  pg-data:
 
 networks:
   orbital-net:

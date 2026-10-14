@@ -256,7 +256,7 @@ def build():
          "climáticos, áreas de risco, pedidos de socorro (SOS) e doações.", size=17)
     text(s, 0.6, 3.05, 6.5, 3.3, [
         ".NET 8 em Clean Architecture: API, Application, Domain e Infrastructure",
-        "EF Core 8 com SQL Server, autenticação JWT e Swagger",
+        "EF Core 8 com PostgreSQL (Supabase), autenticação JWT e Swagger",
         "Objetivo desta entrega: levar a API do código ao ar com Docker, pipeline CI/CD e dois ambientes na nuvem",
         "Tudo versionado no GitHub: código, Dockerfile, compose, pipeline e infraestrutura (render.yaml)",
     ], size=16, bullets=True, space_after=10)
@@ -300,7 +300,7 @@ def build():
             text(s, xs[4], y + 0.05, nw, 0.4, "automático", size=12, color=MUTED, align=PP_ALIGN.CENTER)
     text(s, 0.6, 6.25, 12.1, 0.4, [[("Ferramenta: ", {"bold": True}), "GitHub Actions   ·   ",
                                     ("Registro: ", {"bold": True}), "GitHub Container Registry   ·   ",
-                                    ("Hospedagem: ", {"bold": True}), "Render + Azure SQL Database"]],
+                                    ("Hospedagem: ", {"bold": True}), "Render + Supabase (PostgreSQL)"]],
          size=15, color=TEXT)
 
     # 4. Etapas do pipeline
@@ -308,7 +308,7 @@ def build():
     table(s, 0.6, 1.6, [2.35, 2.55, 7.2], [
         ["Job", "Quando roda", "O que faz"],
         ["build-test", "PR e push em develop/main", "Restore com lock file e cache do NuGet, build Release, testes xUnit (resultado .trx como artefato) e checagem de pacotes vulneráveis"],
-        ["compose-smoke", "PR e push", "Valida os 3 arquivos compose, sobe API + SQL Server 2022 e testa health, swagger, register, login e admin"],
+        ["compose-smoke", "PR e push", "Valida os 3 arquivos compose, sobe API + PostgreSQL 17 e testa health, swagger, register, login e admin"],
         ["docker", "Só em push", "Build multi-stage com cache e push de ghcr.io/vsilva1997/orbital-sos-api:<sha>"],
         ["deploy-staging", "Push em develop", "Deploy hook do Render com a imagem do SHA; espera o /health responder Healthy na versão nova"],
         ["deploy-production", "Push em main", "Mesmo deploy, depois da aprovação manual no environment production"],
@@ -328,7 +328,7 @@ def build():
     text(s, 0.85, 2.05, 5.5, 0.3, "rede orbital-net (bridge)", size=12, color=MUTED, font=CODE_FONT)
     node(s, 0.85, 2.5, 2.45, 1.55, "api", "OrbitalSOS.API\nporta 8080 · usuário app\nHEALTHCHECK /health",
          fill=DARK, color="FFFFFF", sub_color=LIGHT_TXT, size=17, sub_size=12)
-    node(s, 3.9, 2.5, 2.45, 1.55, "db", "SQL Server 2022\nhealthcheck sqlcmd\n(mssql-tools18 -C)",
+    node(s, 3.9, 2.5, 2.45, 1.55, "db", "PostgreSQL 17\nhealthcheck pg_isready\nporta só em 127.0.0.1",
          fill=DARK2, color="FFFFFF", sub_color=LIGHT_TXT, size=17, sub_size=12)
     arrow(s, 3.33, 3.27, 3.87, 3.27)
     text(s, 2.3, 4.2, 2.6, 0.55, ["depends_on: db", "service_healthy"], size=12, color=MUTED, align=PP_ALIGN.CENTER, space_after=0)
@@ -338,17 +338,17 @@ def build():
          align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space_after=2)
     arrow(s, 2.075, 4.82, 2.075, 4.08)
     vol = box(s, 4.2, 4.75, 1.85, 1.25, fill=TINT, line="8FB3AE", shape=MSO_SHAPE.CAN)
-    vol.name = "Volume mssql-data"
-    text(s, 4.2, 5.12, 1.85, 0.8, [[("mssql-data", {"bold": True})], "/var/opt/mssql"], size=12,
+    vol.name = "Volume pg-data"
+    text(s, 4.05, 5.12, 2.15, 0.8, [[("pg-data", {"bold": True})], "/var/lib/postgresql"], size=12,
          align=PP_ALIGN.CENTER, space_after=0)
     arrow(s, 5.125, 4.08, 5.125, 4.72)
 
     text(s, 7.1, 1.5, 5.6, 0.35, "Nuvem: staging e produção", size=15, bold=True, color=MUTED)
     node(s, 7.1, 1.95, 5.6, 1.0, "ghcr.io/vsilva1997/orbital-sos-api", "tags :<sha> · :develop · :main",
          fill=DARK, color="FFFFFF", sub_color=LIGHT_TXT, size=15, sub_size=12)
-    for x, env, db in ((7.1, "Staging", "orbitalsos-staging"), (10.05, "Production", "orbitalsos-prod")):
+    for x, env, schema, user in ((7.1, "Staging", "staging", "orbital_staging"), (10.05, "Production", "production", "orbital_prod")):
         node(s, x, 3.5, 2.65, 1.2, "Render", f"Web Service Free\nambiente {env}", fill=TINT, size=15, sub_size=11)
-        node(s, x, 5.3, 2.65, 1.1, "Azure SQL", f"{db}\nfree offer (serverless)", fill=TINT, size=15, sub_size=12)
+        node(s, x, 5.3, 2.65, 1.1, "Supabase", f"schema {schema}\nusuário {user}", fill=TINT, size=15, sub_size=12)
         arrow(s, x + 1.325, 2.98, x + 1.325, 3.47)
         arrow(s, x + 1.325, 4.73, x + 1.325, 5.27)
 
@@ -407,7 +407,7 @@ def build():
          ("12-producao-swagger.png", "Register e login executados no Swagger de produção")),
         ("Evidências: nuvem", "Infraestrutura dos dois ambientes",
          ("13-render-servicos.png", "Render: serviços de staging e produção no ar"),
-         ("14-azure-sql.png", "Azure SQL: bancos de staging e produção (free offer)")),
+         ("14-supabase.png", "Supabase: schemas de staging e produção (plano Free)")),
     ]
     for kicker, title, left, right in pares:
         s = d.content(kicker, title)
@@ -431,15 +431,15 @@ def build():
         ]),
         ("Desafios e soluções", "Infraestrutura: containers, CI e nuvem gratuita", [
             ["Desafio encontrado", "Como foi resolvido"],
-            ["Healthcheck do banco quebrado: o sqlcmd mudou para mssql-tools18 e exige -C",
-             "Caminho novo com -C e depends_on com condition: service_healthy"],
+            ["O Azure for Students não pôde ser ativado, e o SQL Server (2 GB, x86) não tem hospedagem gratuita fora dele",
+             "Troca para PostgreSQL: provider Npgsql, migration regerada, compose com postgres:17 e banco no Supabase Free"],
             ["Container rodando como root na porta 80", "USER app e porta 8080, padrão do .NET 8"],
-            ["Mac Apple Silicon sem Docker e SQL Server só x86",
-             "Compose validado no runner x86 do GitHub Actions em todo PR (job compose-smoke)"],
-            ["Hospedar SQL Server (mínimo 2 GB, x86) sem custo",
-             "Render Free para a API + Azure SQL free offer: mesmo motor, sem trocar de banco"],
-            ["Cold start: o Render dorme e o Azure SQL pausa",
-             "EnableRetryOnFailure e smoke test com retry até o /health responder a versão do commit"],
+            ["Mac sem Docker instalado para testar o compose",
+             "Compose validado no runner do GitHub Actions em todo PR (job compose-smoke)"],
+            ["Plano Free do Supabase permite só 2 projetos ativos",
+             "Um projeto com schemas staging e production, cada um com usuário próprio e senha em hash SCRAM"],
+            ["Cold start: o Render dorme e o Supabase pausa após 7 dias sem uso",
+             "Retry no EF, smoke test com retry e health check diário agendado no GitHub Actions"],
             ["ubuntu-latest migraria para Ubuntu 26 na semana da entrega", "Runner fixado em ubuntu-24.04"],
         ]),
     ]
@@ -459,7 +459,7 @@ def build():
         ["Pipeline com etapas de build, teste e deploy", ok, ".github/workflows/ci-cd.yml"],
         ["README.md com instruções e prints", ok if tem_prints else pend, "README.md + docs/evidencias/"],
         ["Documentação técnica com evidências (PDF ou PPT)", ok if tem_prints else pend, "docs/Documentacao_DevOps.pptx"],
-        ["Deploy realizado nos ambientes staging e produção", ok if DEPLOY_OK else pend, "Render + Azure SQL"],
+        ["Deploy realizado nos ambientes staging e produção", ok if DEPLOY_OK else pend, "Render + Supabase"],
     ], size=14, row_h=0.6)
 
     # 17. Links

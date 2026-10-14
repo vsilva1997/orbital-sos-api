@@ -11,16 +11,26 @@ using OrbitalSOS.Application.Services;
 using OrbitalSOS.Infrastructure.Data;
 using OrbitalSOS.Infrastructure.Repositories;
 
+// DateTime gravado como "timestamp without time zone" (mesma semântica do datetime2 do SQL Server)
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
-// DB: a connection string vem da variável de ambiente ConnectionStrings__DefaultConnection
+// DB (PostgreSQL): a connection string vem da variável de ambiente ConnectionStrings__DefaultConnection
 builder.Services.AddDbContext<AppDbContext>(opt =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
     if (string.IsNullOrWhiteSpace(connectionString))
         throw new InvalidOperationException("Defina a variável de ambiente ConnectionStrings__DefaultConnection.");
-    // Retry para falhas transitórias (ex.: Azure SQL serverless retomando após pausa)
-    opt.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+    // Schema do ambiente (Database__Schema) quando staging e produção dividem o mesmo banco; vazio = public.
+    // As tabelas seguem o search_path do usuário do banco; aqui só o histórico de migrations é qualificado.
+    var schema = builder.Configuration["Database:Schema"];
+    opt.UseNpgsql(connectionString, npg =>
+    {
+        // Retry para falhas transitórias (ex.: pooler ou banco retomando após pausa)
+        npg.EnableRetryOnFailure();
+        if (!string.IsNullOrWhiteSpace(schema)) npg.MigrationsHistoryTable("__EFMigrationsHistory", schema);
+    });
 });
 
 // Repos

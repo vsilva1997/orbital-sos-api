@@ -17,6 +17,7 @@
 .env.*
 **/*.pfx
 **/secrets.json
+.segredos/
 
 # Fora do runtime da API
 tests/
