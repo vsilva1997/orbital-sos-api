@@ -28,7 +28,7 @@ REPO_URL = "https://github.com/vsilva1997/orbital-sos-api"
 STAGING_URL = "https://orbital-sos-api-staging.onrender.com"
 PROD_URL = "https://orbital-sos-api-prod.onrender.com"
 # Status do checklist: True = concluído
-DEPLOY_OK = False
+DEPLOY_OK = True
 
 # Paleta: teal profundo (estabilidade/ambiente) + laranja SOS (alerta)
 DARK, DARK2, TINT, ACCENT = "0E3B43", "155E63", "E8F3F1", "E8572A"

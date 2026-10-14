@@ -294,4 +294,4 @@ As imagens ficam em [`docs/evidencias/`](docs/evidencias/), e a lista do que cad
 | Pipeline com etapas de build, teste e deploy | ☑ `.github/workflows/ci-cd.yml` |
 | README.md com instruções e prints | ☐ instruções prontas; faltam os prints em `docs/evidencias/` |
 | Documentação técnica com evidências (PDF ou PPT) | ☐ `docs/Documentacao_DevOps.pptx`; faltam os prints e os integrantes |
-| Deploy realizado nos ambientes staging e produção | ☐ aguardando a configuração do Render e do Supabase |
+| Deploy realizado nos ambientes staging e produção | ☑ Render + Supabase, pelo pipeline (links no topo e em "Prints do funcionamento") |

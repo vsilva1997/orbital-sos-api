@@ -48,8 +48,10 @@ Render baixa a imagem sem credencial. Confira se precisar: GitHub > Packages > `
    - `Admin__Email` / `Admin__Password`
 
    O `Jwt__Key` é gerado pelo próprio Render (`generateValue: true`). O `Database__Schema` já vem do `render.yaml`.
-3. O primeiro deploy de produção pode falhar, porque a tag `:main` ainda não existe. Isso é esperado: o deploy de verdade
-   é feito pelo pipeline.
+3. O Render valida se as imagens existem: enquanto a tag `:main` não existir (antes do primeiro merge na `main`), crie o
+   serviço de produção depois que o job **docker** da `main` publicar a imagem. O deploy de produção espera a aprovação
+   manual, e dá tempo de criar o serviço nesse intervalo. Alternativa sem Blueprint: **New > Web Service > Existing Image**
+   com os mesmos valores do `render.yaml` (plano Free, região Virginia, health check `/health`).
 
 ## 4. Secrets e variáveis no GitHub (environments)
 
