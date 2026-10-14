@@ -1,28 +1,54 @@
-version: "3.9"
+# Ambiente local: API .NET 8 + PostgreSQL 17 (mesma versão major do Supabase usado em staging/produção)
+#   cp .env.example .env        (troque os valores)
+#   docker compose up -d --build
+# Staging e produção simulados: docker-compose.staging.yml e docker-compose.prod.yml
+name: orbital-sos
+
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:17-alpine
     environment:
-      SA_PASSWORD: "OrbitalSOS@2024"
-      ACCEPT_EULA: "Y"
+      POSTGRES_DB: ${POSTGRES_DB:-orbitalsos}
+      POSTGRES_USER: ${POSTGRES_USER:-orbitalsos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - orbital-net
     ports:
-      - "1433:1433"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "OrbitalSOS@2024", "-Q", "SELECT 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${API_IMAGE:-orbital-sos-api:local}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-orbitalsos};Username=${POSTGRES_USER:-orbitalsos};Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?defina JWT_KEY no .env}
+      Admin__Email: ${ADMIN_EMAIL:-}
+      Admin__Password: ${ADMIN_PASSWORD:-}
     ports:
-      - "8080:80"
+      - "${API_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      ASPNETCORE_ENVIRONMENT: Docker
-      ConnectionStrings__DefaultConnection: "Server=db;Database=OrbitalSOS;User Id=sa;Password=OrbitalSOS@2024;TrustServerCertificate=True;"
-      Jwt__Key: "OrbitalSOS-Super-Secret-Key-2024-FIAP-Assignment"
-      Jwt__Issuer: "OrbitalSOS"
-      Jwt__Audience: "OrbitalSOS"
+    networks:
+      - orbital-net
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+
+networks:
+  orbital-net:
+    driver: bridge

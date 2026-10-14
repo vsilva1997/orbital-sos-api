@@ -1,19 +1,37 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OrbitalSOS.API.HealthChecks;
 using OrbitalSOS.API.Middlewares;
 using OrbitalSOS.Application.Interfaces;
 using OrbitalSOS.Application.Services;
 using OrbitalSOS.Infrastructure.Data;
 using OrbitalSOS.Infrastructure.Repositories;
 
+// DateTime gravado como "timestamp without time zone" (mesma semântica do datetime2 do SQL Server)
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
-// DB
+// DB (PostgreSQL): a connection string vem da variável de ambiente ConnectionStrings__DefaultConnection
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Defina a variável de ambiente ConnectionStrings__DefaultConnection.");
+    // Schema do ambiente (Database__Schema) quando staging e produção dividem o mesmo banco; vazio = public.
+    // As tabelas seguem o search_path do usuário do banco; aqui só o histórico de migrations é qualificado.
+    var schema = builder.Configuration["Database:Schema"];
+    opt.UseNpgsql(connectionString, npg =>
+    {
+        // Retry para falhas transitórias (ex.: pooler ou banco retomando após pausa)
+        npg.EnableRetryOnFailure();
+        if (!string.IsNullOrWhiteSpace(schema)) npg.MigrationsHistoryTable("__EFMigrationsHistory", schema);
+    });
+});
 
 // Repos
 builder.Services.AddScoped<ShelterRepository>();
@@ -31,8 +49,10 @@ builder.Services.AddScoped<ISosRequestService, SosRequestService>();
 builder.Services.AddScoped<IDonationService, DonationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// JWT
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+// JWT: a chave vem da variável de ambiente Jwt__Key (HMAC-SHA256 exige no mínimo 32 bytes)
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    throw new InvalidOperationException("Defina a variável de ambiente Jwt__Key com pelo menos 32 caracteres.");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opt =>
     {
@@ -46,6 +66,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+
+// Health check: verifica se a API consegue conectar no banco
+builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("database");
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -69,11 +92,13 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Apply migrations on startup
+// Apply migrations on startup (somente em banco relacional; os testes usam EF InMemory)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    if (db.Database.IsRelational()) db.Database.Migrate();
+    if (await AdminSeeder.SeedAsync(db, app.Configuration["Admin:Email"], app.Configuration["Admin:Password"], app.Configuration["Admin:Name"]))
+        app.Logger.LogInformation("Administrador inicial criado: {Email}", app.Configuration["Admin:Email"]);
 }
 
 app.UseSwagger();
@@ -81,6 +106,9 @@ app.UseSwaggerUI();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = HealthResponseWriter.WriteAsync })
+    .AllowAnonymous();
+app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
 app.Run();
 

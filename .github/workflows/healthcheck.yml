@@ -1,0 +1,35 @@
+# Monitoramento diário: chama /health e /swagger de staging e produção.
+# Mantém o Render e o Supabase (planos Free) ativos e falha (com e-mail do GitHub) se algum ambiente cair.
+name: Health check agendado
+
+on:
+  schedule:
+    - cron: "17 11 * * *" # todo dia às 08:17 (horário de Brasília)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Health (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: staging
+            url: ${{ vars.STAGING_URL }}
+          - name: produção
+            url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Smoke test no /health (com retry para cold start)
+        env:
+          APP_URL: ${{ matrix.url }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "::warning::URL de ${{ matrix.name }} não configurada"; exit 0; fi
+          SMOKE_TIMEOUT=300 scripts/smoke-test.sh "$APP_URL"

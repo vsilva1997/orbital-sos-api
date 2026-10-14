@@ -1,0 +1,32 @@
+# Build do .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+
+# Resultados de testes e cobertura
+TestResults/
+*.trx
+coverage*.xml
+
+# IDEs e sistema operacional
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Segredos: nunca versionar. Use .env.example como modelo.
+.env
+.env.*
+!.env.example
+*.pfx
+appsettings.*.local.json
+secrets.json
+.segredos/
+
+# Pacote de entrega gerado por scripts/empacotar.*
+entrega.zip
