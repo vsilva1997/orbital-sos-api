@@ -106,14 +106,14 @@ jobs:
         run: |
           {
             echo "ASPNETCORE_ENVIRONMENT=Development"
-            echo "MSSQL_SA_PASSWORD=Ci1-$(openssl rand -hex 12)"
+            echo "POSTGRES_PASSWORD=Ci1-$(openssl rand -hex 12)"
             echo "JWT_KEY=$(openssl rand -base64 48 | tr -d '\n')"
             echo "ADMIN_EMAIL=admin@ci.orbitalsos.dev"
             echo "ADMIN_PASSWORD=Ci1-$(openssl rand -hex 10)"
             echo "APP_VERSION=${GITHUB_SHA}"
           } > .env
 
-      - name: Subir API + SQL Server (docker compose up)
+      - name: Subir API + PostgreSQL (docker compose up)
         run: docker compose up -d --build --wait --wait-timeout 300
 
       - name: Smoke test (health, swagger, register, login, admin)
