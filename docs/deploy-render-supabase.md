@@ -1,58 +1,55 @@
-# Runbook: deploy em staging e produção (Render + Azure SQL)
+# Runbook: deploy em staging e produção (Render + Supabase)
 
 Arquitetura dos ambientes na nuvem:
 
-| Ambiente | API (container) | Banco | Branch | Aprovação |
+| Ambiente | API (container) | Banco (PostgreSQL no Supabase) | Branch | Aprovação |
 |---|---|---|---|---|
-| staging | Render Web Service `orbital-sos-api-staging` (Free, virginia) | Azure SQL `orbitalsos-staging` (free offer) | `develop` | automática |
-| production | Render Web Service `orbital-sos-api-prod` (Free, virginia) | Azure SQL `orbitalsos-prod` (free offer) | `main` | manual (environment `production`) |
+| staging | Render Web Service `orbital-sos-api-staging` (Free, virginia) | schema `staging`, usuário `orbital_staging` | `develop` | automática |
+| production | Render Web Service `orbital-sos-api-prod` (Free, virginia) | schema `production`, usuário `orbital_prod` | `main` | manual (environment `production`) |
 
-A imagem é a mesma nos dois ambientes (`ghcr.io/vsilva1997/orbital-sos-api:<sha>`). O que muda são as
-variáveis de ambiente de cada serviço. Nenhum segredo fica no Git.
+A imagem é a mesma nos dois ambientes (`ghcr.io/vsilva1997/orbital-sos-api:<sha>`). O que muda são as variáveis de
+ambiente de cada serviço. Os dois ambientes ficam no mesmo projeto Supabase (plano Free, região us-east-1), isolados
+por schema. Cada usuário de banco só tem permissão no próprio schema, e o `search_path` dele aponta para esse schema.
+Nenhum segredo fica no Git.
 
-## 1. Azure SQL Database (free offer)
+## 1. Supabase (projeto e usuários)
 
-1. Ative o **Azure for Students** em <https://azure.microsoft.com/free/students> com o e-mail da FIAP (não pede cartão).
-2. No portal, abra **SQL databases > Create**. No banner *"Want to try Azure SQL Database for free?"*, clique em **Apply offer**.
-   - Resource group: `rg-orbital-sos` (novo)
-   - Database name: `orbitalsos-staging`
-   - Server: **Create new**
-     - nome único, ex.: `orbital-sos-sql-<seu-rm>`
-     - região **East US 2** (ou East US; se a política do Azure for Students bloquear, escolha outra região dos EUA)
-     - autenticação **SQL authentication**, com login de admin e senha forte (guarde num gerenciador de senhas)
-   - *Behavior when free limit is reached*: **Auto-pause the database until next month** (garante custo zero)
-   - Aba **Networking**: Public endpoint. Em *Add current client IP address*, marque **Yes** (para usar o Query editor).
-3. Repita o passo 2 para o banco `orbitalsos-prod` **no mesmo servidor**. Cada banco tem a própria cota gratuita.
-4. Em cada banco, abra **Connection strings > ADO.NET**. Troque `{your_password}` e acrescente `Connect Timeout=60;`, porque o banco
-   serverless pode levar até 1 minuto para retomar depois de uma pausa. Exemplo:
+1. Em <https://supabase.com/dashboard>, clique em **New project**:
+   - Name: `orbital-sos-api`
+   - Database password: clique em **Generate a password**. A API não usa essa senha, então não precisa guardá-la.
+   - Region: **East US (North Virginia)**, a mais próxima do Render (virginia)
+   - Plano **Free**
+2. Quando o projeto terminar de subir, abra **SQL Editor > New query**. Cole o conteúdo de `.segredos/supabase-setup.sql`,
+   que é gerado localmente e fica fora do Git, e clique em **Run**. O script cria:
+   - os schemas `staging` e `production`;
+   - os usuários `orbital_staging` e `orbital_prod`, com as senhas como hash SCRAM-SHA-256;
+   - as permissões de cada usuário no próprio schema.
+3. Clique em **Connect** (topo da página) > **Session pooler** e anote o *host* (ex.: `aws-0-us-east-1.pooler.supabase.com`)
+   e o *project ref* (o trecho depois de `postgres.` no usuário). A conexão direta do plano Free é só IPv6, e o Render
+   precisa de IPv4. Por isso a API usa o **Session pooler**, na porta 5432.
+4. Com o ref e o host, gere localmente as variáveis de cada ambiente. Elas ficam em `.segredos/render-staging.env` e
+   `.segredos/render-production.env`, e a connection string tem o formato:
 
    ```text
-   Server=tcp:orbital-sos-sql-xxx.database.windows.net,1433;Initial Catalog=orbitalsos-staging;User ID=<login>;Password=<senha>;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;
+   Host=<host-do-pooler>;Port=5432;Database=postgres;Username=orbital_staging.<ref>;Password=<senha>;SSL Mode=Require;Maximum Pool Size=5;Timeout=30
    ```
 
-> Opcional (boa prática): em vez do admin do servidor, crie um usuário por banco no **Query editor**
-> (`CREATE USER orbital_app WITH PASSWORD = '...'; ALTER ROLE db_owner ADD MEMBER orbital_app;`).
-> O `db_owner` é necessário porque a API aplica as migrations na inicialização.
+## 2. Imagem no GHCR
 
-## 2. Imagem pública no GHCR
-
-Depois do primeiro push na `develop`, o job **docker** publica `ghcr.io/vsilva1997/orbital-sos-api`.
-Para o Render baixar a imagem sem credencial, abra GitHub > seu perfil > **Packages** > `orbital-sos-api` > **Package settings** >
-**Change visibility** > **Public**. O repositório já é público.
+O job **docker** publica `ghcr.io/vsilva1997/orbital-sos-api`. Como o repositório é público, o pacote também é, e o
+Render baixa a imagem sem credencial. Confira se precisar: GitHub > Packages > `orbital-sos-api` > visibilidade *Public*.
 
 ## 3. Render (Blueprint)
 
 1. No Render, use o **workspace pessoal**, não o de outro projeto. Abra **New > Blueprint** e conecte o repositório
    `vsilva1997/orbital-sos-api`, branch `develop`. O Render lê o [`render.yaml`](../render.yaml).
-2. Na criação, o Render pede as variáveis `sync: false` de cada serviço:
-   - `ConnectionStrings__DefaultConnection`: a connection string do banco do ambiente (staging ou prod)
-   - `Admin__Email` / `Admin__Password`: credenciais do administrador inicial de cada ambiente
+2. Na criação, o Render pede as variáveis `sync: false` de cada serviço. Copie os valores de `.segredos/render-<ambiente>.env`:
+   - `ConnectionStrings__DefaultConnection`
+   - `Admin__Email` / `Admin__Password`
 
-   O `Jwt__Key` é gerado pelo próprio Render (`generateValue: true`).
-3. O primeiro deploy do serviço de produção pode falhar, porque a tag `:main` ainda não existe. Isso é esperado:
-   o deploy de verdade é feito pelo pipeline.
-4. Em cada serviço, abra **Connect > Outbound** e copie as faixas de IP de saída. No Azure, em **SQL server > Networking >
-   Firewall rules**, adicione cada faixa (Start IP / End IP).
+   O `Jwt__Key` é gerado pelo próprio Render (`generateValue: true`). O `Database__Schema` já vem do `render.yaml`.
+3. O primeiro deploy de produção pode falhar, porque a tag `:main` ainda não existe. Isso é esperado: o deploy de verdade
+   é feito pelo pipeline.
 
 ## 4. Secrets e variáveis no GitHub (environments)
 
@@ -66,20 +63,22 @@ gh secret set RENDER_DEPLOY_HOOK_URL --env staging --repo vsilva1997/orbital-sos
 gh secret set RENDER_DEPLOY_HOOK_URL --env production --repo vsilva1997/orbital-sos-api
 ```
 
-A URL pública de cada serviço não é segredo. Ela é usada no smoke test e no link do environment:
+A URL pública de cada serviço não é segredo. Ela fica em variáveis do repositório, usadas pelo smoke test do deploy,
+pelo link do environment e pelo health check diário:
 
 ```bash
-gh variable set APP_URL --env staging --repo vsilva1997/orbital-sos-api --body "https://orbital-sos-api-staging.onrender.com"
+gh variable set STAGING_URL --repo vsilva1997/orbital-sos-api --body "https://orbital-sos-api-staging.onrender.com"
 ```
 
 ```bash
-gh variable set APP_URL --env production --repo vsilva1997/orbital-sos-api --body "https://orbital-sos-api-prod.onrender.com"
+gh variable set PRODUCTION_URL --repo vsilva1997/orbital-sos-api --body "https://orbital-sos-api-prod.onrender.com"
 ```
 
 ## 5. Fluxo de deploy
 
 1. Merge na `develop`: build, testes, compose e imagem; depois o **deploy-staging** chama o deploy hook com
    `imgURL=ghcr.io/vsilva1997/orbital-sos-api:<sha>` e espera o `/health` responder `Healthy` com `version = <sha>`.
+   Na primeira inicialização, a API aplica as migrations no schema do ambiente.
 2. PR `develop -> main` e merge: mesmo pipeline. O **deploy-production** fica *Waiting* até alguém aprovar em
    **Actions > run > Review deployments**.
 3. Para reexecutar um deploy que falhou por configuração: `gh run rerun <run-id> --failed`.
@@ -87,5 +86,7 @@ gh variable set APP_URL --env production --repo vsilva1997/orbital-sos-api --bod
 ## Observações do plano Free
 
 - Os serviços Free do Render dormem depois de 15 minutos sem tráfego. O primeiro acesso leva de 30 a 60 s.
-- O Azure SQL serverless pausa quando fica ocioso. A API usa `EnableRetryOnFailure` e o smoke test tem retry de até 10 min.
-- A cota do Azure SQL free é de 100.000 vCore-segundos e 32 GB por banco por mês. Com auto-pause não há cobrança.
+- Projetos Free do Supabase são pausados depois de 7 dias sem atividade. O workflow
+  [`healthcheck.yml`](../.github/workflows/healthcheck.yml) chama o `/health` dos dois ambientes todo dia, o que mantém
+  API e banco ativos e avisa se algum ambiente cair.
+- A API usa `EnableRetryOnFailure`, e o smoke test do pipeline tem retry de até 10 minutos.

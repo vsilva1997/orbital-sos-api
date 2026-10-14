@@ -31,15 +31,14 @@ orbital-sos-api/
 
 ## Como executar localmente com Docker
 
-**Pré-requisitos:** Docker Desktop (ou OrbStack) com Docker Compose v2.24 ou mais recente e pelo menos 4 GB de RAM para o Docker.
-O SQL Server precisa de 2 GB e só tem imagem x86_64. Em Mac Apple Silicon, ative *Settings > General > Use Rosetta for
-x86_64/amd64 emulation*.
+**Pré-requisitos:** Docker Desktop (ou OrbStack) com Docker Compose v2.24 ou mais recente. As imagens da API e do PostgreSQL
+rodam nativamente em x86_64 e em ARM (Mac Apple Silicon).
 
 ```bash
 git clone https://github.com/vsilva1997/orbital-sos-api.git
 cd orbital-sos-api
 cp .env.example .env          # troque as senhas e a chave JWT
-docker compose up -d --build  # sobe SQL Server + API (a API espera o banco ficar healthy)
+docker compose up -d --build  # sobe PostgreSQL + API (a API espera o banco ficar healthy)
 docker compose ps             # os dois serviços devem aparecer como "healthy"
 ```
 
@@ -47,7 +46,7 @@ docker compose ps             # os dois serviços devem aparecer como "healthy"
 |---|---|
 | Swagger | <http://localhost:8080/swagger> |
 | Health check | <http://localhost:8080/health> |
-| SQL Server | `localhost,1433` (usuário `sa`, senha do `.env`) |
+| PostgreSQL | `localhost:5432` (banco e usuário `orbitalsos`, senha do `.env`) |
 
 Teste rápido de ponta a ponta (requer `curl` e `jq`). Ele cobre health, swagger, register, login, endpoint protegido e o login do admin:
 
@@ -72,7 +71,7 @@ Cada ambiente usa um projeto Compose próprio, com volume, porta e `ASPNETCORE_E
 | Variável | Uso |
 |---|---|
 | `ASPNETCORE_ENVIRONMENT` | `Development`, `Staging` ou `Production` (carrega `appsettings.<Ambiente>.json`) |
-| `MSSQL_SA_PASSWORD` | Senha do `sa`. Vira `ConnectionStrings__DefaultConnection` da API |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Banco local. Viram `ConnectionStrings__DefaultConnection` da API |
 | `JWT_KEY` | Chave de assinatura do JWT, com no mínimo 32 caracteres. Vira `Jwt__Key` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Administrador inicial, criado na primeira inicialização (opcional) |
 | `API_PORT`, `DB_PORT`, `DB_NAME`, `APP_VERSION` | Portas no host, nome do banco e versão exibida no `/health` |
@@ -85,7 +84,7 @@ Os segredos nunca ficam no código. A API lê `ConnectionStrings__DefaultConnect
 dotnet test
 ```
 
-São 14 testes de integração. Eles sobem a API em memória com `WebApplicationFactory` e banco EF InMemory, então não precisam de SQL Server.
+São 14 testes de integração. Eles sobem a API em memória com `WebApplicationFactory` e banco EF InMemory, então não precisam de banco externo.
 
 ### Endpoints principais
 
@@ -116,7 +115,7 @@ São 14 testes de integração. Eles sobem a API em memória com `WebApplication
 ## Pipeline CI/CD
 
 **Ferramenta:** GitHub Actions ([`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)). A imagem fica no GitHub Container
-Registry (GHCR) e os ambientes rodam no Render, com banco Azure SQL Database.
+Registry (GHCR) e os ambientes rodam no Render, com banco PostgreSQL no Supabase.
 
 ```mermaid
 flowchart LR
@@ -129,7 +128,7 @@ flowchart LR
 | Job | Quando roda | O que faz |
 |---|---|---|
 | `build-test` | PR e push em `develop`/`main` | `setup-dotnet` 8 com cache do NuGet, `dotnet restore --locked-mode`, `dotnet build -c Release`, `dotnet test` com logger trx (artefato `test-results` e tabela no resumo do job) e checagem de pacotes vulneráveis |
-| `compose-smoke` | PR e push | Valida os três arquivos Compose, sobe API + SQL Server com segredos efêmeros e roda o smoke test completo |
+| `compose-smoke` | PR e push | Valida os três arquivos Compose, sobe API + PostgreSQL com segredos efêmeros e roda o smoke test completo |
 | `docker` | só em push (nunca em PR) | Build com Buildx (cache GHA) e push de `ghcr.io/vsilva1997/orbital-sos-api:<sha>` e `:<branch>` |
 | `deploy-staging` | push em `develop` | Environment `staging`: chama o deploy hook do Render com a imagem do SHA e espera o `/health` responder `Healthy` nessa versão (retry de até 10 min) |
 | `deploy-production` | push em `main` | Environment `production`: **aprovação manual obrigatória**, depois o mesmo deploy e smoke test |
@@ -142,15 +141,15 @@ flowchart LR
 | Configuração no GitHub | Tipo | Onde |
 |---|---|---|
 | `RENDER_DEPLOY_HOOK_URL` | secret | environments `staging` e `production` |
-| `APP_URL` | variável | environments `staging` e `production` |
+| `STAGING_URL`, `PRODUCTION_URL` | variáveis do repositório | link dos environments, smoke test e health check diário |
 | `GITHUB_TOKEN` | automático | push no GHCR (`packages: write` só no job `docker`) |
 
 Os segredos de runtime ficam nas variáveis de cada serviço no Render:
-- `ConnectionStrings__DefaultConnection`, com a connection string do Azure SQL;
+- `ConnectionStrings__DefaultConnection`, com a connection string do Supabase (usuário e schema do ambiente);
 - `Jwt__Key`, gerada pelo próprio Render;
 - `Admin__Email` e `Admin__Password`.
 
-Passo a passo da configuração da nuvem: [`docs/deploy-render-azure.md`](docs/deploy-render-azure.md).
+Passo a passo da configuração da nuvem: [`docs/deploy-render-supabase.md`](docs/deploy-render-supabase.md).
 
 ## Containerização
 
@@ -216,11 +215,11 @@ ENTRYPOINT ["dotnet", "OrbitalSOS.API.dll"]
 
 | Recurso | Configuração |
 |---|---|
-| Serviço `db` | `mcr.microsoft.com/mssql/server:2022-latest` (`platform: linux/amd64`), `MSSQL_SA_PASSWORD` vinda do `.env`, porta publicada só em `127.0.0.1` |
-| Health check do banco | `/opt/mssql-tools18/bin/sqlcmd -C ... -Q 'SELECT 1'`. Desde o SQL Server 2022 CU14 o caminho é `mssql-tools18` e o `-C` é obrigatório |
+| Serviço `db` | `postgres:17-alpine` (mesma versão major do Supabase), `POSTGRES_PASSWORD` vinda do `.env`, porta publicada só em `127.0.0.1` |
+| Health check do banco | `pg_isready -U $POSTGRES_USER -d $POSTGRES_DB` a cada 5 s |
 | Serviço `api` | Build do `Dockerfile` (ou imagem do GHCR em `docker-compose.prod.yml`), `depends_on: db: condition: service_healthy` |
-| Volume nomeado | `mssql-data` em `/var/opt/mssql`: os dados sobrevivem ao `docker compose down` |
-| Rede dedicada | `orbital-net` (bridge): a API acessa o banco pelo nome `db`, sem expor o SQL Server |
+| Volume nomeado | `pg-data` em `/var/lib/postgresql/data`: os dados sobrevivem ao `docker compose down` |
+| Rede dedicada | `orbital-net` (bridge): a API acessa o banco pelo nome `db`, sem expor o banco para fora |
 | Variáveis | Todas vêm do `.env` (modelo em `.env.example`). Os segredos obrigatórios usam `${VAR:?mensagem}` e falham cedo se faltarem |
 
 **Imagem gerada:** `ghcr.io/vsilva1997/orbital-sos-api`. As tags são:
@@ -269,21 +268,21 @@ As imagens ficam em [`docs/evidencias/`](docs/evidencias/), e a lista do que cad
 | ![Staging health](docs/evidencias/09-staging-health.png) | ![Staging swagger](docs/evidencias/10-staging-swagger.png) |
 | **Produção: `/health`** | **Produção: register e login no Swagger** |
 | ![Produção health](docs/evidencias/11-producao-health.png) | ![Produção swagger](docs/evidencias/12-producao-swagger.png) |
-| **Render: os dois serviços no ar** | **Azure SQL: bancos de staging e produção** |
-| ![Render](docs/evidencias/13-render-servicos.png) | ![Azure SQL](docs/evidencias/14-azure-sql.png) |
+| **Render: os dois serviços no ar** | **Supabase: schemas de staging e produção** |
+| ![Render](docs/evidencias/13-render-servicos.png) | ![Supabase](docs/evidencias/14-supabase.png) |
 
 ## Tecnologias utilizadas
 
 | Camada | Tecnologias |
 |---|---|
 | API | .NET 8, ASP.NET Core Web API, Clean Architecture (API / Application / Domain / Infrastructure) |
-| Dados | Entity Framework Core 8, SQL Server 2022 (local, em container) e Azure SQL Database serverless (nuvem) |
+| Dados | Entity Framework Core 8 com Npgsql, PostgreSQL 17 (local, em container) e Supabase (nuvem, um schema por ambiente) |
 | Segurança | JWT Bearer, BCrypt, segredos por variáveis de ambiente, GitHub Environments com aprovação manual |
 | Observabilidade | Health checks do ASP.NET Core (`/health` com verificação do banco), Swagger/OpenAPI |
 | Testes | xUnit, `WebApplicationFactory`, EF Core InMemory, smoke test em bash (`curl` + `jq`) |
 | Containers | Docker (multi-stage, não root), Docker Compose, GitHub Container Registry (GHCR) |
 | CI/CD | GitHub Actions (setup-dotnet, Buildx, metadata/build-push), actionlint |
-| Nuvem | Render (Web Services com imagem Docker, Blueprint `render.yaml`), Microsoft Azure (Azure SQL Database free offer) |
+| Nuvem | Render (Web Services com imagem Docker, Blueprint `render.yaml`), Supabase (PostgreSQL gerenciado, plano Free) |
 
 ## Checklist de entrega
 
@@ -295,4 +294,4 @@ As imagens ficam em [`docs/evidencias/`](docs/evidencias/), e a lista do que cad
 | Pipeline com etapas de build, teste e deploy | ☑ `.github/workflows/ci-cd.yml` |
 | README.md com instruções e prints | ☐ instruções prontas; faltam os prints em `docs/evidencias/` |
 | Documentação técnica com evidências (PDF ou PPT) | ☐ `docs/Documentacao_DevOps.pptx`; faltam os prints e os integrantes |
-| Deploy realizado nos ambientes staging e produção | ☐ aguardando a configuração do Render e do Azure SQL |
+| Deploy realizado nos ambientes staging e produção | ☐ aguardando a configuração do Render e do Supabase |
