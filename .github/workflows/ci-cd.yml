@@ -202,7 +202,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: staging
-      url: ${{ vars.APP_URL }}
+      url: ${{ vars.STAGING_URL }}
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
@@ -223,9 +223,9 @@ jobs:
 
       - name: Smoke test no /health (com retry)
         env:
-          APP_URL: ${{ vars.APP_URL }}
+          APP_URL: ${{ vars.STAGING_URL }}
         run: |
-          if [ -z "$APP_URL" ]; then echo "::error::Variável APP_URL não configurada no environment staging"; exit 1; fi
+          if [ -z "$APP_URL" ]; then echo "::error::Variável de repositório STAGING_URL não configurada"; exit 1; fi
           scripts/smoke-test.sh "$APP_URL" "$GITHUB_SHA"
           echo "### Staging no ar: $APP_URL/swagger (versão $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -237,7 +237,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: production
-      url: ${{ vars.APP_URL }}
+      url: ${{ vars.PRODUCTION_URL }}
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -258,8 +258,8 @@ jobs:
 
       - name: Smoke test no /health (com retry)
         env:
-          APP_URL: ${{ vars.APP_URL }}
+          APP_URL: ${{ vars.PRODUCTION_URL }}
         run: |
-          if [ -z "$APP_URL" ]; then echo "::error::Variável APP_URL não configurada no environment production"; exit 1; fi
+          if [ -z "$APP_URL" ]; then echo "::error::Variável de repositório PRODUCTION_URL não configurada"; exit 1; fi
           scripts/smoke-test.sh "$APP_URL" "$GITHUB_SHA"
           echo "### Produção no ar: $APP_URL/swagger (versão $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
